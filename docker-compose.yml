@@ -1,0 +1,44 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-routershark}
+      POSTGRES_USER: ${POSTGRES_USER:-routershark}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-routershark}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-routershark} -d ${POSTGRES_DB:-routershark}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      HTTP_ADDR: :8080
+      UDP_ADDR: :37008
+      DATABASE_URL: postgres://${POSTGRES_USER:-routershark}:${POSTGRES_PASSWORD:-routershark}@postgres:5432/${POSTGRES_DB:-routershark}?sslmode=disable
+      ROUTER_IP_ALLOWLIST: ${ROUTER_IP_ALLOWLIST:-}
+      API_TOKEN: ${API_TOKEN:-}
+      DB_BATCH_SIZE: 250
+      DB_BATCH_INTERVAL_MS: 200
+      RETENTION_DAYS: ${RETENTION_DAYS:-30}
+    ports:
+      - "37008:37008/udp"
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "8088:80"
+
+volumes:
+  pgdata:
